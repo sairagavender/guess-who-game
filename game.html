@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess Who? - Board Mode</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --accent: #e94560;
+            --text-color: #ecf0f1;
+            --card-hover: #0f3460;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Top Bar */
+        header {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            padding: 15px 0;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin: 20px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-pick {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-reset {
+            background: #fff;
+            color: var(--bg-color);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Game Grid */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            max-width: 1000px;
+            width: 95%;
+            padding-bottom: 50px;
+        }
+
+        .card {
+            background: white;
+            color: var(--bg-color);
+            border-radius: 12px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            user-select: none; /* Prevent highlighting text on fast clicks */
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .card img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #f0f0f0;
+            margin-bottom: 8px;
+            pointer-events: none; /* Let clicks pass through to card */
+        }
+
+        .card .name {
+            font-weight: 800;
+            font-size: 1rem;
+            display: block;
+        }
+
+        /* Eliminated State (Grayed Out) */
+        .card.eliminated {
+            opacity: 0.25;
+            filter: grayscale(100%) contrast(80%);
+            transform: scale(0.95);
+            background: #555;
+            box-shadow: none;
+        }
+
+        .card.eliminated::after {
+            content: "❌";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            opacity: 0.8;
+        }
+
+        /* Secret Character Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal {
+            background: white;
+            color: var(--bg-color);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 300px;
+            width: 90%;
+            animation: popIn 0.3s ease;
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .secret-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: #eee;
+            margin: 15px auto;
+        }
+
+        .secret-name {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--accent);
+            margin-bottom: 20px;
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🕵️ Guess Who?</h1>
+</header>
+
+<div class="controls">
+    <button class="btn-reset" onclick="resetBoard()">🔄 Reset Board</button>
+    <button class="btn-pick" onclick="pickSecret()">❓ Pick My Character</button>
+</div>
+
+<div class="board" id="game-board">
+    </div>
+
+<div class="modal-overlay" id="modal" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h2>You are...</h2>
+        <div class="secret-img" id="secret-img-display"></div>
+        <div class="secret-name" id="secret-name-display">?</div>
+        <p style="opacity: 0.6; font-size: 0.9rem;">(Tap anywhere outside to hide)</p>
+        <button class="btn-reset" onclick="closeModal()" style="background: var(--bg-color); color: white; width: 100%;">Got it!</button>
+    </div>
+</div>
+
+<script>
+    // 24 Characters for a full board
+    const names = [
+        "Alex", "Bella", "Charlie", "Diana", "Ethan", "Fiona", 
+        "George", "Hannah", "Ivan", "Julia", "Kevin", "Luna", 
+        "Mike", "Nora", "Oscar", "Penny", "Quinn", "Ryan", 
+        "Sophie", "Tom", "Ursula", "Victor", "Wendy", "Xander"
+    ];
+
+    // Seed data to ensure they look consistent every time you reload
+    const characters = names.map(name => ({
+        name: name,
+        // Using DiceBear "Micah" style for a fun, artistic look, or "Avataaars"
+        // Let's use Avataaars for clear distinct features (glasses, hats)
+        img: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}&backgroundColor=transparent`
+    }));
+
+    const board = document.getElementById('game-board');
+
+    // Initialize Board
+    function initGame() {
+        board.innerHTML = '';
+        characters.forEach(char => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.onclick = () => toggleCard(card);
+            
+            card.innerHTML = `
+                <img src="${char.img}" alt="${char.name}">
+                <span class="name">${char.name}</span>
+            `;
+            board.appendChild(card);
+        });
+    }
+
+    // Toggle Gray/Color
+    function toggleCard(cardElement) {
+        cardElement.classList.toggle('eliminated');
+    }
+
+    // Reset everything
+    function resetBoard() {
+        if(confirm("Reset the whole board?")) {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(c => c.classList.remove('eliminated'));
+            // Optional: Shuffle board? 
+            // For now, keep order static so it's easier to scan
+        }
+    }
+
+    // Pick a secret character for the player
+    function pickSecret() {
+        const randomChar = characters[Math.floor(Math.random() * characters.length)];
+        
+        document.getElementById('secret-name-display').innerText = randomChar.name;
+        document.getElementById('secret-img-display').innerHTML = `<img src="${randomChar.img}" style="width:100%; height:100%; border-radius:50%;">`;
+        
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    // Run on load
+    initGame();
+
+</script>
+
+</body>
+</html>
